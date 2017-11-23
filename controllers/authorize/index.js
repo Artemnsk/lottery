@@ -7,6 +7,7 @@ const https = require('https');
 const queryString = require('querystring');
 const publicCredentials = require('../../credentials/public');
 const privateCredentials = require('../../credentials/private');
+const fs = require('fs');
 // This URL is used as redirect_uri in OAuth process.
 const authRedirectURL = url.format({
     protocol: publicCredentials.protocol,
@@ -70,8 +71,21 @@ function authorizeComplete(req, res, next) {
                 responseMessage += chunk;
             });
             response.on('end', function() {
-                // TODO: save token.
-                res.render(__dirname + '/../../views/authorizationcompleted');
+                // Save token.
+                let responseJSON = JSON.parse(responseMessage);
+                if (responseJSON.ok === true) {
+                    let filePath = __dirname + '/../../tokens/' + responseJSON.team_id + '.txt';
+                    // Save access token for this team.
+                    fs.writeFile(filePath, responseJSON.access_token + "\n", function (err) {
+                        if (err) {
+                            res.status(500).send('Some error appeared.');
+                        } else {
+                            res.render(__dirname + '/../../views/authorizationcompleted');
+                        }
+                    });
+                } else {
+                    res.status(500).send('Some error appeared.');
+                }
             });
         });
         request.write(data);

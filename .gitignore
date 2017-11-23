@@ -4,3 +4,5 @@ node_modules
 # Ignore all credential file except examples.
 credentials
 !credentials/example
+# Directory used to store workspace tokens.
+tokens
