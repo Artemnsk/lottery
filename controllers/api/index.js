@@ -7,7 +7,9 @@ const tokenVerification = require('../../middlewares/tokenverification');
 const setSlackAccessToken = require('../../middlewares/setslackaccesstoken');
 
 // const userRegexp = /<@[0-9A-Z]+(\|.+)?>/i;
-const commandRegexp = /^('|")([^'^"]*)(?:\1)\s(.*)$/i;
+const commandRegexp = /^(\u{27}|\u{22}|\u{AB}|\u{201C}|\u{201D}|\u{2018})([^\u{27}^\u{22}^\u{AB}^\u{BB}^\u{201C}^\u{201D}^\u{2018}^\u{2019}]*)(?:\1|\u{27}|\u{22}|\u{BB}|\u{201C}|\u{201D}|\u{2019})\s(.*)$/iu;
+const nextOptWithQuotesRegexp = /^\s?(\u{27}|\u{22}|\u{AB}|\u{201C}|\u{201D}|\u{2018})([^\u{27}^\u{22}^\u{AB}^\u{BB}^\u{201C}^\u{201D}^\u{2018}^\u{2019}]*)(?:\1|\u{27}|\u{22}|\u{BB}|\u{201C}|\u{201D}|\u{2019})\s?(.*)$/iu;
+const nextOptWithoutQuotesRegexp = /^\s?(\S+)\s?(.*)$/iu;
 
 router.use('/api', tokenVerification);
 
@@ -46,8 +48,24 @@ router.post('/api/slash-commands/lottery', function(req, res) {
         let matches = commandRegexp.exec(req.body.text);
         let title = matches[2];
         let opts = matches[3];
-        let optsArr = opts.split(' ');
-        if (optsArr.length >= 2 && optsArr.length < 50) {
+        // Prepare opts in array.
+        let extractOptArr;
+        let optsArr = [];
+        while (opts) {
+            if (nextOptWithQuotesRegexp.test(opts)) {
+                extractOptArr = nextOptWithQuotesRegexp.exec(opts);
+                optsArr.push(extractOptArr[2]);
+                opts = extractOptArr[3];
+            } else if (nextOptWithoutQuotesRegexp.test(opts)) {
+                extractOptArr = nextOptWithoutQuotesRegexp.exec(opts);
+                optsArr.push(extractOptArr[1]);
+                opts = extractOptArr[2];
+            } else {
+                opts = "";
+            }
+        }
+        // Lottery.
+        if (optsArr.length >= 2 && optsArr.length <= 100) {
             let diceOpts = [];
             let dices = [];
             for (let i = 0; i < optsArr.length; i++) {
@@ -55,6 +73,7 @@ router.post('/api/slash-commands/lottery', function(req, res) {
                 while (dices.indexOf(currentDice) > -1) {
                     currentDice = Math.round(Math.random() * 100);
                 }
+                dices.push(currentDice);
                 // TODO: optsArr to link.
                 diceOpts.push({
                     dice: currentDice,
@@ -81,13 +100,13 @@ router.post('/api/slash-commands/lottery', function(req, res) {
                 response_type: "in_channel",
                 replace_original: true,
                 link_names: true,
-                text: '*' + title + '*' + '\n' + result,
+                text: title + ' by <@' + req.body.user_id + ">\n" + result,
                 attachments: [{
                     title: "Details",
                     text: details,
                     color: "#3AA3E3",
                     attachment_type: "default",
-                    callback_id: "roll"
+                    callback_id: "lottery"
                 }]
             };
             request(req.body.response_url, {
@@ -102,7 +121,7 @@ router.post('/api/slash-commands/lottery', function(req, res) {
             let json = {
                 response_type: "ephemeral",
                 replace_original: true,
-                text: 'Wrong options.'
+                text: 'Wrong formatted options. Do not use less than 2 options and more than 100.'
             };
             request(req.body.response_url, {
                 uri: req.body,
